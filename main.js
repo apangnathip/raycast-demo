@@ -9,21 +9,60 @@ canvas.style.height = size[1] + "px";
 canvas.width = size[0] * scale;
 canvas.height = size[1] * scale;
 
-class Player {
-    constructor(x, y, radius, fov, sight = 10) {
+class Wall {
+    constructor(x, y, width, height, colour = "black") {
         this.x = x;
         this.y = y;
-        this.radius = radius;
-        this.sight = sight;
-        this.speed = 5;
-        this.rotation;
-        this.velocity;
+        this.width = width;
+        this.height = height;
+        this.colour = colour;
     }
 
     draw() {
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, 2*Math.PI);
+        ctx.rect(this.x, this.y, this.width, this.height);
+        ctx.fill()
+    }
+}
+
+class Player {
+    constructor(x, y, radius, fov = 135, sight = 200) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.fov = fov;
+        this.sight = sight;
+        this.speed = 5;
+        this.numRays = 25;
+    }
+
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
         ctx.fill();
+    }
+
+    showFOV() {
+        let fovAngle = this.fov * Math.PI / 180;
+        this.direction = Math.atan2((mouse.y - this.y), (mouse.x - this.x)) - fovAngle / 2;
+        let rayDensity = fovAngle / (this.numRays - 1);
+        let rayAngle;
+
+        for (let i = 0; i < this.numRays; i++) {
+            rayAngle = this.direction + i * rayDensity;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            let rayPoint = {
+                x: this.x + this.sight * Math.cos(rayAngle), 
+                y: this.y + this.sight * Math.sin(rayAngle),
+            }
+            ctx.lineTo(rayPoint.x, rayPoint.y);
+            let sightOpacity = ctx.createLinearGradient(this.x, this.y, rayPoint.x, rayPoint.y);
+            sightOpacity.addColorStop(0.5, "black");
+            sightOpacity.addColorStop(1, "rgba(0, 0, 0, 0)");
+            ctx.strokeStyle = sightOpacity;
+            ctx.stroke();
+        }
     }
 
     movement() {
@@ -42,7 +81,12 @@ class Player {
     }
 }
 
-let player = new Player(25, 25, 15, 90);
+let player = new Player(canvas.width/2, canvas.height/2, 15);
+
+let walls = [
+    new Wall(300, 250, 100, 100), 
+    //new Wall(100, 200, 200, 10)
+]
 
 let keys = {
     w: {pressed: false},
@@ -52,8 +96,8 @@ let keys = {
 }
 
 let mouse = {
-    x: undefined,
-    y: undefined,
+    x: 0,
+    y: 0,
 }
 
 window.addEventListener("keydown", (e) => {
@@ -90,7 +134,7 @@ window.addEventListener("keyup", (e) => {
     }
 });
 
-canvas.addEventListener('mousemove', (e) => {
+window.addEventListener('mousemove', (e) => {
     let bounds = canvas.getBoundingClientRect();
     mouse.x = Math.round((e.clientX - bounds.left) * scale);
     mouse.y = Math.round((e.clientY - bounds.top) * scale);
@@ -100,7 +144,9 @@ function main() {
     requestAnimationFrame(main);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     player.draw();
-    player.movement();
+    player.movement(walls);
+    player.showFOV();
+    walls.forEach((wall) => wall.draw());
 }
 
 main();
