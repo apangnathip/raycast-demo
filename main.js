@@ -20,10 +20,6 @@ class Wall {
     }
 
     draw() {
-    //     ctx.beginPath();
-    //     ctx.fillStyle = this.colour
-    //     ctx.rect(this.x, this.y, this.width, this.height);
-    //     ctx.fill()
         ctx.beginPath();
         ctx.moveTo(this.x1,this.y1);
         ctx.lineTo(this.x2, this.y2);
@@ -37,16 +33,21 @@ class Player {
     constructor(x, y, radius, fov = 135, colour = "white") {
         this.x = x;
         this.y = y;
+        this.fov = fov * Math.PI / 180;
+        this.colour = colour
+
+        this.rotateSpeed = 4 * Math.PI / 180;
+        this.rotation = 0;
         this.prevPos = {x, y};
         this.radius = radius;
-        this.fov = fov * Math.PI / 180;
+        this.thrust = 5;
         this.speed = 5;
-        this.colour = colour
         this.rays = {
             num: 1,
             sight: 300,
             density: undefined,
         }
+
         if (this.rays.num != 1) {
             this.rays.density = this.fov / (this.rays.num - 1);
         } else this.rays.density = this.fov
@@ -60,11 +61,12 @@ class Player {
     }
 
     showFOV() {
-        let direction = Math.atan2((mouse.y - this.y), (mouse.x - this.x)) - this.fov / 2;
+        // let direction = Math.atan2((mouse.y - this.y), (mouse.x - this.x)) - this.fov / 2;
 
         for (let i = 0; i < this.rays.num; i++) {
             let rayAngle = (this.direction + i * this.rays.density);
             let rayPoint ;
+
             if (this.rays.num != 1) {
                 rayPoint = {
                     x: this.x + this.rays.sight * Math.cos(rayAngle), 
@@ -72,58 +74,44 @@ class Player {
                 }
             } else {
                 rayPoint = {
-                    x: this.x + this.rays.sight * Math.cos(direction + this.fov / 2), 
-                    y: this.y + this.rays.sight * Math.sin(direction + this.fov / 2),
+                    x: this.x + this.rays.sight * Math.cos(this.rotation + this.fov / 2), 
+                    y: this.y + this.rays.sight * Math.sin(this.rotation + this.fov / 2),
                 }
             }
+
             ctx.beginPath();
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(rayPoint.x, rayPoint.y);
             ctx.strokeStyle = this.colour;
             ctx.lineWidth = 1;
             ctx.stroke();
-            // let sightOpacity = ctx.createLinearGradient(this.x, this.y, rayPoint.x, rayPoint.y);
-            // sightOpacity.addColorStop(0.5, "black");
-            // sightOpacity.addColorStop(1, "rgba(0, 0, 0, 0)");
-            // ctx.strokeStyle = sightOpacity;
         }
     }
 
     isColliding(bounds) {
         let hit = false;
-        let boundVec;
-        let vUnit;
-        let playerVec;
-        let projuv;
-        let projScale;
-        let distFromBound;
-        let distProj;
-        let distBound;
+
         bounds.forEach((bound) => {
-            boundVec = {
+            let boundVec = {
                 x: bound.x2 - bound.x1, 
                 y: bound.y2 - bound.y1,
             }
-            playerVec = {
+            let playerVec = {
                 x: bound.x1 - this.x,
                 y: bound.y1 - this.y,
             }
-            vUnit = {
-                x: boundVec.x / Math.sqrt(boundVec.x**2 + boundVec.y**2),
-                y: boundVec.y / Math.sqrt(boundVec.x**2 + boundVec.y**2),
-            }
             
-            projScale = (playerVec.x * boundVec.x + playerVec.y * boundVec.y) / 
+            let projScale = (playerVec.x * boundVec.x + playerVec.y * boundVec.y) / 
             (boundVec.x**2 + boundVec.y**2)
 
-            projuv = {
+            let projuv = {
                 x: bound.x1 - projScale * boundVec.x,
                 y: bound.y1 - projScale * boundVec.y,
             }
 
-            distFromBound = Math.sqrt((projuv.x - this.x)**2 + (projuv.y - this.y)**2);
-            distProj = Math.sqrt((projuv.x - bound.x1)**2 + (projuv.y - bound.y1)**2);
-            distBound = Math.sqrt(boundVec.x**2 + boundVec.y**2)
+            let distFromBound = Math.sqrt((projuv.x - this.x)**2 + (projuv.y - this.y)**2);
+            let distProj = Math.sqrt((projuv.x - bound.x1)**2 + (projuv.y - bound.y1)**2);
+            let distBound = Math.sqrt(boundVec.x**2 + boundVec.y**2)
             
             if (distProj < distBound && projScale < 0) {
                 ctx.beginPath();
@@ -147,28 +135,32 @@ class Player {
         if (!this.isColliding(bounds)) {
             this.prevPos.x = this.x;
             this.prevPos.y = this.y;
-            if (keys.w.pressed) {
-                this.y -= this.speed;
+
+            if (keys.up.pressed) {
+                this.speed = this.thrust;
+            } else this.speed *= 0.8
+
+            if (keys.down.pressed) {
+                this.speed = -this.thrust;
+            } else this.speed *= 0.8
+
+            if (keys.left.pressed) {
+                this.rotation -= this.rotateSpeed;
             }
-            if (keys.a.pressed) {
-                this.x -= this.speed;
+
+            if (keys.right.pressed) {
+                this.rotation += this.rotateSpeed;
             }
-            if (keys.s.pressed) {
-                this.y += this.speed;
-            }
-            if (keys.d.pressed) {
-                this.x += this.speed;
-            }
+            this.x += this.speed * Math.sin(-this.rotation)
+            this.y += this.speed * Math.cos(-this.rotation)
         } else {
             this.x = this.prevPos.x;
             this.y = this.prevPos.y;
-        }
-       
-        console.log(this.isColliding(bounds));
+        }  
     }
 }
 
-let player = new Player(canvas.width/2, canvas.height/2, 15);
+let player = new Player(canvas.width / 2, canvas.height / 2, 15);
 
 let walls = [
     new Wall(300, 300, 100, 300), 
@@ -176,10 +168,10 @@ let walls = [
 ]
 
 let keys = {
-    w: {pressed: false},
-    a: {pressed: false},
-    s: {pressed: false},
-    d: {pressed: false},
+    up: {pressed: false},
+    left: {pressed: false},
+    down: {pressed: false},
+    right: {pressed: false},
 }
 
 let mouse = {
@@ -189,34 +181,34 @@ let mouse = {
 
 window.addEventListener("keydown", (e) => {
     switch (e.key) {
-        case "w":
-            keys.w.pressed = true;
+        case "ArrowUp":
+            keys.up.pressed = true;
             break;
-        case "a":
-            keys.a.pressed = true;
+        case "ArrowLeft":
+            keys.left.pressed = true;
             break;
-        case "s":
-            keys.s.pressed = true;
+        case "ArrowDown":
+            keys.down.pressed = true;
             break;
-        case "d":
-            keys.d.pressed = true;
+        case "ArrowRight":
+            keys.right.pressed = true;
             break;
     }
 });
 
 window.addEventListener("keyup", (e) => {
     switch (e.key) {
-        case "w":
-            keys.w.pressed = false;
+        case "ArrowUp":
+            keys.up.pressed = false;
             break;
-        case "a":
-            keys.a.pressed = false;
+        case "ArrowLeft":
+            keys.left.pressed = false;
             break;
-        case "s":
-            keys.s.pressed = false;
+        case "ArrowDown":
+            keys.down.pressed = false;
             break;
-        case "d":
-            keys.d.pressed = false;
+        case "ArrowRight":
+            keys.right.pressed = false;
             break;
     }
 });
