@@ -36,15 +36,18 @@ class Player {
         this.fov = fov * Math.PI / 180;
         this.colour = colour
 
+        this.velo = 0;
+        this.accel = 0.1;
+
         this.rotateSpeed = 4 * Math.PI / 180;
+        this.pastRotation = 0;
         this.rotation = 0;
-        this.prevPos = {x, y};
         this.radius = radius;
         this.thrust = 5;
         this.speed = 5;
         this.rays = {
-            num: 1,
-            sight: 300,
+            num: 5,
+            sight: 1000,
             density: undefined,
         }
 
@@ -60,12 +63,16 @@ class Player {
         ctx.fill();
     }
 
-    showFOV() {
+    rayIntersect(ray, wall) {
+        console.log("hello")
+    }   
+
+    drawRay() {
         // let direction = Math.atan2((mouse.y - this.y), (mouse.x - this.x)) - this.fov / 2;
 
         for (let i = 0; i < this.rays.num; i++) {
-            let rayAngle = (this.direction + i * this.rays.density);
-            let rayPoint ;
+            let rayAngle = (this.rotation + i * this.rays.density) + Math.PI/2 - this.fov / 2;
+            let rayPoint;
 
             if (this.rays.num != 1) {
                 rayPoint = {
@@ -74,10 +81,30 @@ class Player {
                 }
             } else {
                 rayPoint = {
-                    x: this.x + this.rays.sight * Math.cos(this.rotation + this.fov / 2), 
-                    y: this.y + this.rays.sight * Math.sin(this.rotation + this.fov / 2),
+                    x: this.x + this.rays.sight * Math.cos(this.rotation + this.fov), 
+                    y: this.y + this.rays.sight * Math.sin(this.rotation + this.fov),
                 }
             }
+
+            walls.forEach((wall) => {
+                let A1 = rayPoint.y - this.y;
+                let B1 = this.x - rayPoint.x;
+                let C1 = A1 * this.x + B1 * this.y;
+                let A2 = wall.y2 - wall.y1;
+                let B2 = wall.x1 - wall.x2;
+                let C2 = A2 * wall.x1 + B2 * wall.y1;
+                let deno = A1 * B2 - A2 * B1;
+
+                if (deno == 0) return null;
+
+                let intX = (B2 * C1 - B1 * C2) / deno;
+                let intY = (A1 * C2 - A2 * C1) / deno;
+
+                ctx.beginPath();
+                ctx.arc(intX, intY, 5, 0, 2 * Math.PI);
+                ctx.fill();
+            })
+
 
             ctx.beginPath();
             ctx.moveTo(this.x, this.y);
@@ -90,6 +117,7 @@ class Player {
 
     isColliding(bounds) {
         let hit = false;
+        let poc;
 
         bounds.forEach((bound) => {
             let boundVec = {
@@ -120,43 +148,60 @@ class Player {
                 ctx.strokeStyle = "red"
                 ctx.stroke();
             }
-
+            
             if (distFromBound < this.radius && distProj < distBound && projScale < 0) {
                 hit = true;
+                poc = {x: projuv.x, y: projuv.y, wallWidth: 5}
             } 
         });
 
         if (hit) {
-            return true
+            return poc
         }   else return false;
     }
-
+    
     movement(bounds) {
-        if (!this.isColliding(bounds)) {
-            this.prevPos.x = this.x;
-            this.prevPos.y = this.y;
+        // let colliding = this.isColliding(bounds);
+        // if (colliding) {
+        //     let pastRotation = this.rotation
+        //     this.x = colliding.x + this.radius * Math.sin(-this.rotation);
+        //     this.y = colliding.y + this.radius * Math.cos(-this.rotation);
+        //     this.velo = 0;
+        // }
 
-            if (keys.up.pressed) {
-                this.speed = this.thrust;
-            } else this.speed *= 0.8
+        if (!keys.up.pressed && !keys.down.pressed) {
+            if (Math.abs(this.velo) < 0.001) this.velo = 0;
+            this.velo *= 0.9
+        }
 
-            if (keys.down.pressed) {
-                this.speed = -this.thrust;
-            } else this.speed *= 0.8
-
-            if (keys.left.pressed) {
-                this.rotation -= this.rotateSpeed;
+        if (keys.up.pressed) {
+            if (this.velo >= 5) {
+                this.velo = 5
             }
+            this.velo += this.accel;
+            this.pastRotation = this.rotation;
+        } 
 
-            if (keys.right.pressed) {
-                this.rotation += this.rotateSpeed;
+        if (keys.down.pressed) {
+            if (this.velo <= -3) {
+                this.velo = -3
             }
-            this.x += this.speed * Math.sin(-this.rotation)
-            this.y += this.speed * Math.cos(-this.rotation)
-        } else {
-            this.x = this.prevPos.x;
-            this.y = this.prevPos.y;
-        }  
+            this.velo -= this.accel;
+            this.pastRotation = this.rotation;
+        }
+
+        if (keys.left.pressed) {
+            this.rotation -= this.rotateSpeed;
+        }
+
+        if (keys.right.pressed) {
+            this.rotation += this.rotateSpeed;
+        }
+            // this.x += this.speed * Math.sin(-this.rotation)
+            // this.y += this.speed * Math.cos(-this.rotation)
+    
+        this.x += this.velo * Math.sin(-this.pastRotation);  
+        this.y += this.velo * Math.cos(-this.pastRotation);  
     }
 }
 
@@ -164,7 +209,7 @@ let player = new Player(canvas.width / 2, canvas.height / 2, 15);
 
 let walls = [
     new Wall(300, 300, 100, 300), 
-    new Wall(100, 200, 200, 10)
+    // new Wall(100, 200, 200, 10)
 ]
 
 let keys = {
@@ -223,7 +268,7 @@ window.addEventListener('mousemove', (e) => {
   function main() {
       requestAnimationFrame(main);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      player.showFOV();
+      player.drawRay();
       walls.forEach((wall) => wall.draw());
       player.draw();
       player.movement(walls);
