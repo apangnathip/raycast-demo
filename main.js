@@ -30,23 +30,20 @@ class Wall {
 }
 
 class Player {
-    constructor(x, y, radius, fov = 135, colour = "white") {
+    constructor(x, y, radius, fov = 45, colour = "white") {
         this.x = x;
         this.y = y;
         this.fov = fov * Math.PI / 180;
         this.colour = colour
-
-        this.velo = 0;
-        this.accel = 0.1;
-
-        this.rotateSpeed = 4 * Math.PI / 180;
+        
         this.pastRotation = 0;
+        this.rotateSpeed = 4 * Math.PI / 180;
         this.rotation = 0;
         this.radius = radius;
-        this.thrust = 5;
-        this.speed = 5;
+        this.accel = 0.1;
+        this.velo = 0;
         this.rays = {
-            num: 5,
+            num: 25,
             sight: 1000,
             density: undefined,
         }
@@ -63,46 +60,49 @@ class Player {
         ctx.fill();
     }
 
-    rayIntersect(ray, wall) {
-        console.log("hello")
-    }   
-
     drawRay() {
-        // let direction = Math.atan2((mouse.y - this.y), (mouse.x - this.x)) - this.fov / 2;
-
         for (let i = 0; i < this.rays.num; i++) {
-            let rayAngle = (this.rotation + i * this.rays.density) + Math.PI/2 - this.fov / 2;
-            let rayPoint;
-
+            let rayPoint,
+                rayAngle;
+                
             if (this.rays.num != 1) {
-                rayPoint = {
-                    x: this.x + this.rays.sight * Math.cos(rayAngle), 
-                    y: this.y + this.rays.sight * Math.sin(rayAngle),
-                }
+                rayAngle = (this.rotation + i * this.rays.density) + Math.PI/2 - this.fov / 2;
             } else {
-                rayPoint = {
-                    x: this.x + this.rays.sight * Math.cos(this.rotation + this.fov), 
-                    y: this.y + this.rays.sight * Math.sin(this.rotation + this.fov),
-                }
+                rayAngle =  this.rotation + Math.PI / 2;
+            }
+
+            rayPoint = {
+                x: this.x + this.rays.sight * Math.cos(rayAngle), 
+                y: this.y + this.rays.sight * Math.sin(rayAngle),
             }
 
             walls.forEach((wall) => {
-                let A1 = rayPoint.y - this.y;
-                let B1 = this.x - rayPoint.x;
-                let C1 = A1 * this.x + B1 * this.y;
-                let A2 = wall.y2 - wall.y1;
-                let B2 = wall.x1 - wall.x2;
-                let C2 = A2 * wall.x1 + B2 * wall.y1;
-                let deno = A1 * B2 - A2 * B1;
+                let A1 = rayPoint.y - this.y,
+                    B1 = this.x - rayPoint.x,
+                    C1 = A1 * this.x + B1 * this.y,
+                    A2 = wall.y2 - wall.y1,
+                    B2 = wall.x1 - wall.x2,
+                    C2 = A2 * wall.x1 + B2 * wall.y1,
+                    deno = A1 * B2 - A2 * B1;
 
                 if (deno == 0) return null;
 
-                let intX = (B2 * C1 - B1 * C2) / deno;
-                let intY = (A1 * C2 - A2 * C1) / deno;
+                let intPoint = {
+                    x: (B2 * C1 - B1 * C2) / deno,
+                    y: (A1 * C2 - A2 * C1) / deno,
+                }
 
-                ctx.beginPath();
-                ctx.arc(intX, intY, 5, 0, 2 * Math.PI);
-                ctx.fill();
+                let intWallRatio = (intPoint.x - wall.x2) / (wall.x1 - wall.x2),
+                    intRayRatio = (intPoint.x - rayPoint.x) / (this.x - rayPoint.x);
+
+                let withinWall = intWallRatio < 1 && intWallRatio > 0 && intRayRatio < 1;
+
+                
+                if (withinWall) {
+                    ctx.beginPath();
+                    ctx.arc(intPoint.x, intPoint.y, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
             })
 
 
@@ -116,8 +116,8 @@ class Player {
     }
 
     isColliding(bounds) {
-        let hit = false;
-        let poc;
+        let poc,
+            hit = false;
 
         bounds.forEach((bound) => {
             let boundVec = {
@@ -137,9 +137,9 @@ class Player {
                 y: bound.y1 - projScale * boundVec.y,
             }
 
-            let distFromBound = Math.sqrt((projuv.x - this.x)**2 + (projuv.y - this.y)**2);
-            let distProj = Math.sqrt((projuv.x - bound.x1)**2 + (projuv.y - bound.y1)**2);
-            let distBound = Math.sqrt(boundVec.x**2 + boundVec.y**2)
+            let distFromBound = Math.sqrt((projuv.x - this.x)**2 + (projuv.y - this.y)**2),
+                distProj = Math.sqrt((projuv.x - bound.x1)**2 + (projuv.y - bound.y1)**2),
+                distBound = Math.sqrt(boundVec.x**2 + boundVec.y**2)
             
             if (distProj < distBound && projScale < 0) {
                 ctx.beginPath();
@@ -197,8 +197,6 @@ class Player {
         if (keys.right.pressed) {
             this.rotation += this.rotateSpeed;
         }
-            // this.x += this.speed * Math.sin(-this.rotation)
-            // this.y += this.speed * Math.cos(-this.rotation)
     
         this.x += this.velo * Math.sin(-this.pastRotation);  
         this.y += this.velo * Math.cos(-this.pastRotation);  
@@ -209,7 +207,7 @@ let player = new Player(canvas.width / 2, canvas.height / 2, 15);
 
 let walls = [
     new Wall(300, 300, 100, 300), 
-    // new Wall(100, 200, 200, 10)
+    new Wall(100, 200, 200, 50)
 ]
 
 let keys = {
