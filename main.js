@@ -1,13 +1,18 @@
-const canvas = document.querySelector("canvas");
-const ctx = canvas.getContext("2d");
+const casterCanvas = document.getElementById("raycaster");
+const cctx = casterCanvas.getContext("2d");
+
+const renderCanvas = document.getElementById("renderer");
+const rctx = renderCanvas.getContext("2d");
+
 const scale = window.devicePixelRatio;
-ctx.scale(scale, scale);
+cctx.scale(scale, scale);
+rctx.scale(scale, scale);
 
 const size = [600, 300];
-canvas.style.width = size[0] + "px";
-canvas.style.height = size[1] + "px";
-canvas.width = size[0] * scale;
-canvas.height = size[1] * scale;
+casterCanvas.style.width = renderCanvas.style.width = size[0] + "px";
+casterCanvas.style.height = renderCanvas.style.height = size[1] + "px";
+casterCanvas.width = renderCanvas.width = size[0] * scale;
+casterCanvas.height = renderCanvas.height = size[1] * scale;
 
 class Bound {
     /**
@@ -29,12 +34,12 @@ class Bound {
     }
 
     draw() {
-        ctx.beginPath();
-        ctx.moveTo(this.x1,this.y1);
-        ctx.lineTo(this.x2, this.y2);
-        ctx.lineWidth = this.width;
-        ctx.strokeStyle = this.colour;
-        ctx.stroke();
+        cctx.beginPath();
+        cctx.moveTo(this.x1,this.y1);
+        cctx.lineTo(this.x2, this.y2);
+        cctx.lineWidth = this.width;
+        cctx.strokeStyle = this.colour;
+        cctx.stroke();
     }
 }
 
@@ -60,96 +65,19 @@ class Player {
         this.radius = radius;
         this.fov = fov * Math.PI / 180;
         this.colour = colour;
-        this.rayColour = rayColour;
         
         this.rotation = 0;
         this.pastRotation = 0;
         this.rotateSpeed = 4 * Math.PI / 180;
         this.accel = 0.1;
         this.velo = 0;
-        this.rays = {
-            num: 50,
-            sight: 500,
-            density: undefined,
-        };
-
-        if (this.rays.num != 1 && this.rays.num != 360) {
-            this.rays.density = this.fov / (this.rays.num - 1);
-        } else this.rays.density = this.fov
     }
 
     draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
-        ctx.fillStyle = this.colour;
-        ctx.fill();
-    }
-
-    /**
-     * Draw each ray sequentially.
-     * @param {list} bounds - Objects which can block rays
-     */
-    drawRay(bounds) {
-        for (let i = 0; i < this.rays.num; i++) {
-            let ray = {
-                point: undefined,
-                angle: undefined,
-            };
-                
-            // Offset all rays so that it aligns with player rotation.
-            if (this.rays.num != 1) {
-                ray.angle = (this.rotation + i * this.rays.density) + (Math.PI / 2 - this.fov / 2);
-            } else {
-                ray.angle =  this.rotation + Math.PI / 2;
-            }
-
-            ray.point = {
-                x: this.x + this.rays.sight * Math.cos(ray.angle), 
-                y: this.y + this.rays.sight * Math.sin(ray.angle),
-            }
-            
-            // Sort bounds by whichever one the current ray hits first.
-            bounds.sort((a, b) => {
-                let aPoint = this.rayIntersection(ray, a),
-                    bPoint = this.rayIntersection(ray, b);
-                
-                if (!aPoint) return 1;
-                if (!bPoint) return -1;
-
-                let playerToA = Math.hypot(this.x - aPoint.x, this.y - aPoint.y);
-                let playerToB = Math.hypot(this.x - bPoint.x, this.y - bPoint.y);
-                
-                return playerToA - playerToB;
-            })
-
-            let point = this.rayIntersection(ray, bounds[0]);
-            if (point) ray.point = point
-
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y);
-            ctx.lineTo(ray.point.x, ray.point.y);
-            ctx.strokeStyle = this.rayColour;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        }
-    }
-
-
-    /**
-     * Calculates point of intersection between a ray and a bound.
-     * @param {Object} ray - A line emitted from player
-     * @param {Bound} bound - Objects which can block rays
-     * @returns {Object} point of intersection
-     */
-    rayIntersection(ray, bound) {
-        let r = {x: ray.point.x - this.x, y: ray.point.y - this.y};
-        let s = {x: bound.x2 - bound.x1, y: bound.y2 - bound.y1};
-        
-        let deno = r.x * s.y - r.y * s.x;
-        let u = ((bound.x1 - this.x) * r.y - (bound.y1 - this.y) * r.x) / deno;
-        let t = ((bound.x1 - this.x) * s.y - (bound.y1 - this.y) * s.x) / deno;
-
-        return (u >= 0 && u <= 1 && t >= 0 && t <= 1) && {x: this.x + r.x*t, y: this.y + r.y*t};
+        cctx.beginPath();
+        cctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+        cctx.fillStyle = this.colour;
+        cctx.fill();
     }
 
     /**
@@ -190,12 +118,92 @@ class Player {
     }
 }
 
-let player = new Player(canvas.width / 2, canvas.height / 2, 15),
+class Rays {
+    constructor(emitter, fov, num, sight, colour = "white") {
+        this.emitter = emitter
+        this.fov = fov * Math.PI/180;
+        this.num = num;
+        this.sight = sight;
+        this.density = undefined;
+        this.colour = colour;
+        
+        if (this.num != 1 && this.num != 360) {
+            this.density = this.fov / (this.num - 1);
+        } else this.density = this.fov
+    }
+    /**
+     * Draw each ray sequentially.
+     * @param {list} bounds - Objects which can block rays
+     */
+     draw(bounds) {
+        for (let i = 0; i < this.num; i++) {
+            let ray = {
+                point: undefined,
+                angle: undefined,
+            };
+                
+            // Offset all rays so that it aligns with player rotation.
+            if (this.num != 1) {
+                ray.angle = (this.emitter.rotation + i * this.density) + (Math.PI / 2 - this.fov / 2);
+            } else {
+                ray.angle =  this.emitter.rotation + Math.PI / 2;
+            }
+
+            ray.point = {
+                x: this.emitter.x + this.sight * Math.cos(ray.angle), 
+                y: this.emitter.y + this.sight * Math.sin(ray.angle),
+            }
+            
+            // Sort bounds by whichever one the current ray hits first.
+            bounds.sort((a, b) => {
+                let aPoint = this.rayIntersection(ray, a),
+                    bPoint = this.rayIntersection(ray, b);
+                
+                if (!aPoint) return 1;
+                if (!bPoint) return -1;
+
+                let playerToA = Math.hypot(this.emitter.x - aPoint.x, this.emitter.y - aPoint.y);
+                let playerToB = Math.hypot(this.emitter.x - bPoint.x, this.emitter.y - bPoint.y);
+                
+                return playerToA - playerToB;
+            })
+
+            let point = this.rayIntersection(ray, bounds[0]);
+            if (point) ray.point = point
+
+            cctx.beginPath();
+            cctx.moveTo(this.emitter.x, this.emitter.y);
+            cctx.lineTo(ray.point.x, ray.point.y);
+            cctx.strokeStyle = this.rayColour;
+            cctx.lineWidth = 1;
+            cctx.stroke();
+        }
+    }
+
+
+    /**
+     * Calculates point of intersection between a ray and a bound.
+     * @param {Object} ray - A line emitted from player
+     * @param {Bound} bound - Objects which can block rays
+     * @returns {Object} point of intersection
+     */
+    rayIntersection(ray, bound) {
+        let r = {x: ray.point.x - this.emitter.x, y: ray.point.y - this.emitter.y};
+        let s = {x: bound.x2 - bound.x1, y: bound.y2 - bound.y1};
+        
+        let deno = r.x * s.y - r.y * s.x;
+        let u = ((bound.x1 - this.emitter.x) * r.y - (bound.y1 - this.emitter.y) * r.x) / deno;
+        let t = ((bound.x1 - this.emitter.x) * s.y - (bound.y1 - this.emitter.y) * s.x) / deno;
+
+        return (u >= 0 && u <= 1 && t >= 0 && t <= 1) && {x: this.emitter.x + r.x*t, y: this.emitter.y + r.y*t};
+    }
+}
+
+let player = new Player(casterCanvas.width / 2, casterCanvas.height / 2, 15),
     walls = [
-        new Bound(100, 200, 200, 200), 
-        new Bound(150, 100, 100, 300),
-        new Bound(100, canvas.height/2, 200, canvas.height/2),
-        new Bound(canvas.width/2, 300, canvas.width/2, 500),
+        new Bound(100, 200, 200, 300), 
+        new Bound(200, 300, 400, 350), 
+        new Bound(400, 350, 600, 250), 
     ];
 
 let mouse = {x: 0, y: 0,},
@@ -244,11 +252,15 @@ window.addEventListener("keyup", (e) => {
 
 function main() {
     requestAnimationFrame(main);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    cctx.clearRect(0, 0, casterCanvas.width, casterCanvas.height);
     walls.forEach((wall) => wall.draw());
-    player.drawRay(walls);
     player.draw();
-    player.movement(walls);
+    player.movement();
+    let rays = new Rays(player, fov=135, num=100, sight=500);
+    rays.draw(bounds=walls);
+
+    dctx.clearRect(0, 0, casterCanvas.width, casterCanvas.height);
 }
 
 main();
