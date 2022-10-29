@@ -24,12 +24,13 @@ class Bound {
      * @param {string} colour 
      * @param {float} width 
      */
-    constructor(x1, y1, x2, y2, colour = "white", width = 2) {
+    constructor(x1, y1, x2, y2, width = 2, height = 500, colour = "white") {
         this.x1 = x1;
         this.y1 = y1;
         this.x2 = x2;
         this.y2 = y2;
         this.width = width;
+        this.height = height;
         this.colour = colour;
     }
 
@@ -59,11 +60,10 @@ class Player {
      * @property {float} velo
      * @property {object} rays - property of rays
      */
-    constructor(x, y, radius, fov = 135, colour = "white", rayColour = "white") {
+    constructor(x, y, radius, colour = "white") {
         this.x = x;
         this.y = y;
         this.radius = radius;
-        this.fov = fov * Math.PI / 180;
         this.colour = colour;
         
         this.rotation = 0;
@@ -137,10 +137,7 @@ class Rays {
      */
      draw(bounds) {
         for (let i = 0; i < this.num; i++) {
-            let ray = {
-                point: undefined,
-                angle: undefined,
-            };
+            let ray = {point: undefined, angle: undefined};
                 
             // Offset all rays so that it aligns with player rotation.
             if (this.num != 1) {
@@ -171,6 +168,8 @@ class Rays {
             let point = this.rayIntersection(ray, bounds[0]);
             if (point) ray.point = point
 
+            this.render(ray.point, i, bounds[0]);
+
             cctx.beginPath();
             cctx.moveTo(this.emitter.x, this.emitter.y);
             cctx.lineTo(ray.point.x, ray.point.y);
@@ -197,13 +196,30 @@ class Rays {
 
         return (u >= 0 && u <= 1 && t >= 0 && t <= 1) && {x: this.emitter.x + r.x*t, y: this.emitter.y + r.y*t};
     }
+
+    render(point, curr, bound) {
+        let spacing = renderCanvas.width / (this.num + 1);
+        let dist = Math.hypot(point.x - this.emitter.x, point.y - this.emitter.y);
+        if (Math.abs(dist - this.sight) < 0.001) return null;
+
+        let angularSize = Math.atan(bound.height / dist);
+        let rectLength = angularSize * (renderCanvas.height / Math.atan(bound.height))
+        let yPos = renderCanvas.height/2 - rectLength/2;
+
+        rctx.fillStyle = `rgba(255,255,255, ${1 - (dist / this.sight)})`;
+        rctx.fillRect(spacing * (curr + 1), yPos, 1, rectLength);
+    }
 }
 
 let player = new Player(casterCanvas.width / 2, casterCanvas.height / 2, 15),
     walls = [
-        new Bound(100, 200, 200, 300), 
-        new Bound(200, 300, 400, 350), 
-        new Bound(400, 350, 600, 250), 
+        // new Bound(100, 200, 200, 300), 
+        // new Bound(200, 300, 400, 350), 
+        // new Bound(400, 350, 600, 250), 
+        new Bound(50, 50, 50, 350), 
+        new Bound(50, 350, 700, 350), 
+        new Bound(700, 350, 700, 50), 
+        new Bound(50, 50, 700, 50), 
     ];
 
 let mouse = {x: 0, y: 0,},
@@ -254,13 +270,14 @@ function main() {
     requestAnimationFrame(main);
 
     cctx.clearRect(0, 0, casterCanvas.width, casterCanvas.height);
+    rctx.clearRect(0, 0, casterCanvas.width, casterCanvas.height);
+
     walls.forEach((wall) => wall.draw());
     player.draw();
     player.movement();
-    let rays = new Rays(player, fov=135, num=100, sight=500);
+    let rays = new Rays(player, fov=90, num=1000, sight=1000);
     rays.draw(bounds=walls);
 
-    dctx.clearRect(0, 0, casterCanvas.width, casterCanvas.height);
 }
 
 main();
