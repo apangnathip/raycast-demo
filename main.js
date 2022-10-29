@@ -1,18 +1,20 @@
-const casterCanvas = document.getElementById("raycaster");
-const cctx = casterCanvas.getContext("2d");
+// Raycasting canvas, top-down 2D
+const cCanvas = document.getElementById("raycaster");
+const cctx = cCanvas.getContext("2d");
 
-const renderCanvas = document.getElementById("renderer");
-const rctx = renderCanvas.getContext("2d");
+// Rendering canvas, first-person pseudo 3D
+const rCanvas = document.getElementById("renderer");
+const rctx = rCanvas.getContext("2d");
 
 const scale = window.devicePixelRatio;
 cctx.scale(scale, scale);
 rctx.scale(scale, scale);
 
 const size = [600, 300];
-casterCanvas.style.width = renderCanvas.style.width = size[0] + "px";
-casterCanvas.style.height = renderCanvas.style.height = size[1] + "px";
-casterCanvas.width = renderCanvas.width = size[0] * scale;
-casterCanvas.height = renderCanvas.height = size[1] * scale;
+cCanvas.style.width = rCanvas.style.width = size[0] + "px";
+cCanvas.style.height = rCanvas.style.height = size[1] + "px";
+cCanvas.width = rCanvas.width = size[0] * scale;
+cCanvas.height = rCanvas.height = size[1] * scale;
 
 class Bound {
     /**
@@ -50,25 +52,20 @@ class Player {
      * @param {float} x
      * @param {float} y
      * @param {float} radius
-     * @param {float} fov - field of view displayed by rays
      * @param {string} colour
-     * @param {string} rayColour
      * @property {float} rotation
      * @property {float} pastRotation - rotation before user input is removed
      * @property {float} rotateSpeed
      * @property {float} accel - acceleration rate
      * @property {float} velo
-     * @property {object} rays - property of rays
      */
     constructor(x, y, radius, colour = "white") {
-        // this.x = 100;
-        // this.y = 300;
         this.x = x;
         this.y = y;
         this.radius = radius;
         this.colour = colour;
         
-        this.rotation = 0.8;
+        this.rotation = 0;
         this.pastRotation = 0;
         this.rotateSpeed = 4 * Math.PI / 180;
         this.accel = 0.1;
@@ -115,42 +112,43 @@ class Player {
             this.rotation += this.rotateSpeed;
         }
     
-        this.x += this.velo * Math.sin(-this.pastRotation);  
-        this.y += this.velo * Math.cos(-this.pastRotation);  
+        this.x += this.velo * Math.cos(this.pastRotation);  
+        this.y += this.velo * Math.sin(this.pastRotation);  
     }
 }
 
 class Rays {
+    /**
+     * Group of rays emitted by an object
+     * @param {Player} emitter - object emitting rays
+     * @param {float} fov - field of view in radians
+     * @param {int} num - number of rays
+     * @param {float} sight - length of rays
+     * @param {string} colour 
+     */
     constructor(emitter, fov, num, sight, colour = "white") {
         this.emitter = emitter
         this.fov = fov * Math.PI/180;
         this.num = num;
         this.sight = sight;
-        this.density = undefined;
         this.colour = colour;
         
-        if (this.num != 1 && this.num != 360) {
-            this.density = this.fov / (this.num - 1);
-        } else this.density = this.fov
+        // Corrects spherical distortion by fixed view segments rather than fixed view angles.
+        this.fovHalfLen = Math.tan(this.fov/2);
+        this.segmentLen = this.fovHalfLen / ((this.num - 1) / 2);
     }
     /**
      * Draw each ray sequentially.
-     * @param {list} bounds - Objects which can block rays
+     * @param {list} bounds - objects which can block rays
      */
      draw(bounds) {
         for (let i = 0; i < this.num; i++) {
             let ray = {point: undefined, angle: undefined};
                 
-            // Offset all rays so that it aligns with player rotation.
             if (this.num != 1) {
-                ray.angle = (this.emitter.rotation + i * this.density) + (Math.PI / 2 - this.fov / 2);
-            } else {
-                ray.angle = this.emitter.rotation + Math.PI / 2;
-            }
+                ray.angle = this.emitter.rotation + Math.atan(this.segmentLen * i - this.fovHalfLen);
+            } else ray.angle = this.emitter.rotation;
 
-            // console.log(ray.angle, this.emitter.rotation + Math.PI/2)
-            // console.log(this.density)
-            
             ray.point = {
                 x: this.emitter.x + this.sight * Math.cos(ray.angle), 
                 y: this.emitter.y + this.sight * Math.sin(ray.angle),
@@ -164,8 +162,8 @@ class Rays {
                 if (!aPoint) return 1;
                 if (!bPoint) return -1;
 
-                let playerToA = Math.hypot(this.emitter.x - aPoint.x, this.emitter.y - aPoint.y);
-                let playerToB = Math.hypot(this.emitter.x - bPoint.x, this.emitter.y - bPoint.y);
+                let playerToA = Math.hypot(this.emitter.x - aPoint.x, this.emitter.y - aPoint.y),
+                    playerToB = Math.hypot(this.emitter.x - bPoint.x, this.emitter.y - bPoint.y);
                 
                 return playerToA - playerToB;
             })
@@ -184,7 +182,6 @@ class Rays {
         }
     }
 
-
     /**
      * Calculates point of intersection between a ray and a bound.
      * @param {Object} ray - A line emitted from player
@@ -192,41 +189,41 @@ class Rays {
      * @returns {Object} point of intersection
      */
     rayIntersection(ray, bound) {
-        let r = {x: ray.point.x - this.emitter.x, y: ray.point.y - this.emitter.y};
-        let s = {x: bound.x2 - bound.x1, y: bound.y2 - bound.y1};
+        let r = {x: ray.point.x - this.emitter.x, y: ray.point.y - this.emitter.y},
+            s = {x: bound.x2 - bound.x1, y: bound.y2 - bound.y1};
         
-        let deno = r.x * s.y - r.y * s.x;
-        let u = ((bound.x1 - this.emitter.x) * r.y - (bound.y1 - this.emitter.y) * r.x) / deno;
-        let t = ((bound.x1 - this.emitter.x) * s.y - (bound.y1 - this.emitter.y) * s.x) / deno;
+        let deno = r.x * s.y - r.y * s.x,
+            u = ((bound.x1 - this.emitter.x) * r.y - (bound.y1 - this.emitter.y) * r.x) / deno,
+            t = ((bound.x1 - this.emitter.x) * s.y - (bound.y1 - this.emitter.y) * s.x) / deno;
 
         return (u >= 0 && u <= 1 && t >= 0 && t <= 1) && {x: this.emitter.x + r.x*t, y: this.emitter.y + r.y*t};
     }
 
+    /**
+     * Render ray collision into a pseudo 3D image.
+     * @param {Object} ray 
+     * @param {integer} curr - iterative number, current loop
+     * @param {Bound} bound 
+     */
     render(ray, curr, bound) {
-        // let spacing = renderCanvas.width / (this.num + 1);
-        let spacing = Math.round(renderCanvas.width / (this.num));
-        let dist = Math.hypot(ray.point.x - this.emitter.x, ray.point.y - this.emitter.y);
+        let spacing = Math.round(rCanvas.width / (this.num)),
+            dist = Math.hypot(ray.point.x - this.emitter.x, ray.point.y - this.emitter.y);
+
         rctx.fillStyle = `rgba(255,255,255, ${1 - (dist / this.sight)})`;
 
-        // if (ray.angle < 0) ray.angle += 2 * Math.PI
-        // if (ray.angle > 2 * Math.PI) ray.angle = 2 * Math.PI
-        let angleDiff = ray.angle - (this.emitter.rotation + (Math.PI / 2));
+        let angleDiff = ray.angle - (this.emitter.rotation);
         dist *= Math.cos(angleDiff)
       
-        // let rectLength = bound.height/dist * (renderCanvas.height / Math.atan(bound.height))
-        let rectLength = (bound.height * renderCanvas.height) / dist;
-        if (rectLength >= renderCanvas.height) rectLength = renderCanvas.height;
-        let yPos = renderCanvas.height/2 - rectLength/2;
-
+        let rectLength = (bound.height * rCanvas.height) / dist;
+        if (rectLength >= rCanvas.height) rectLength = rCanvas.height;
+        
+        let yPos = rCanvas.height/2 - rectLength/2;
         rctx.fillRect(spacing * (curr), yPos, spacing, rectLength);
     }
 }
 
-let player = new Player(casterCanvas.width / 2, casterCanvas.height / 2, 15),
+let player = new Player(cCanvas.width / 2, cCanvas.height / 2, 15),
     walls = [
-        // new Bound(100, 200, 200, 300), 
-        // new Bound(200, 300, 400, 350), 
-        // new Bound(400, 350, 600, 250), 
         new Bound(50, 50, 50, 350), 
         new Bound(50, 350, 700, 350), 
         new Bound(700, 350, 700, 50), 
@@ -280,15 +277,14 @@ window.addEventListener("keyup", (e) => {
 function main() {
     requestAnimationFrame(main);
 
-    cctx.clearRect(0, 0, casterCanvas.width, casterCanvas.height);
-    rctx.clearRect(0, 0, casterCanvas.width, casterCanvas.height);
+    cctx.clearRect(0, 0, cCanvas.width, cCanvas.height);
+    rctx.clearRect(0, 0, cCanvas.width, cCanvas.height);
 
     walls.forEach((wall) => wall.draw());
     player.draw();
     player.movement();
-    let rays = new Rays(player, fov=90, num=100, sight=1000);
+    let rays = new Rays(player, fov=90, num=50, sight=500);
     rays.draw(bounds=walls);
-
 }
 
 main();
