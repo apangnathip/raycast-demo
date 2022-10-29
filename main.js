@@ -24,7 +24,7 @@ class Bound {
      * @param {string} colour 
      * @param {float} width 
      */
-    constructor(x1, y1, x2, y2, width = 2, height = 500, colour = "white") {
+    constructor(x1, y1, x2, y2, width = 2, height = 100, colour = "white") {
         this.x1 = x1;
         this.y1 = y1;
         this.x2 = x2;
@@ -61,12 +61,14 @@ class Player {
      * @property {object} rays - property of rays
      */
     constructor(x, y, radius, colour = "white") {
+        // this.x = 100;
+        // this.y = 300;
         this.x = x;
         this.y = y;
         this.radius = radius;
         this.colour = colour;
         
-        this.rotation = 0;
+        this.rotation = 0.8;
         this.pastRotation = 0;
         this.rotateSpeed = 4 * Math.PI / 180;
         this.accel = 0.1;
@@ -143,9 +145,12 @@ class Rays {
             if (this.num != 1) {
                 ray.angle = (this.emitter.rotation + i * this.density) + (Math.PI / 2 - this.fov / 2);
             } else {
-                ray.angle =  this.emitter.rotation + Math.PI / 2;
+                ray.angle = this.emitter.rotation + Math.PI / 2;
             }
 
+            // console.log(ray.angle, this.emitter.rotation + Math.PI/2)
+            // console.log(this.density)
+            
             ray.point = {
                 x: this.emitter.x + this.sight * Math.cos(ray.angle), 
                 y: this.emitter.y + this.sight * Math.sin(ray.angle),
@@ -168,7 +173,7 @@ class Rays {
             let point = this.rayIntersection(ray, bounds[0]);
             if (point) ray.point = point
 
-            this.render(ray.point, i, bounds[0]);
+            this.render(ray, i, bounds[0]);
 
             cctx.beginPath();
             cctx.moveTo(this.emitter.x, this.emitter.y);
@@ -197,17 +202,23 @@ class Rays {
         return (u >= 0 && u <= 1 && t >= 0 && t <= 1) && {x: this.emitter.x + r.x*t, y: this.emitter.y + r.y*t};
     }
 
-    render(point, curr, bound) {
-        let spacing = renderCanvas.width / (this.num + 1);
-        let dist = Math.hypot(point.x - this.emitter.x, point.y - this.emitter.y);
-        if (Math.abs(dist - this.sight) < 0.001) return null;
+    render(ray, curr, bound) {
+        // let spacing = renderCanvas.width / (this.num + 1);
+        let spacing = Math.round(renderCanvas.width / (this.num));
+        let dist = Math.hypot(ray.point.x - this.emitter.x, ray.point.y - this.emitter.y);
+        rctx.fillStyle = `rgba(255,255,255, ${1 - (dist / this.sight)})`;
 
-        let angularSize = Math.atan(bound.height / dist);
-        let rectLength = angularSize * (renderCanvas.height / Math.atan(bound.height))
+        // if (ray.angle < 0) ray.angle += 2 * Math.PI
+        // if (ray.angle > 2 * Math.PI) ray.angle = 2 * Math.PI
+        let angleDiff = ray.angle - (this.emitter.rotation + (Math.PI / 2));
+        dist *= Math.cos(angleDiff)
+      
+        // let rectLength = bound.height/dist * (renderCanvas.height / Math.atan(bound.height))
+        let rectLength = (bound.height * renderCanvas.height) / dist;
+        if (rectLength >= renderCanvas.height) rectLength = renderCanvas.height;
         let yPos = renderCanvas.height/2 - rectLength/2;
 
-        rctx.fillStyle = `rgba(255,255,255, ${1 - (dist / this.sight)})`;
-        rctx.fillRect(spacing * (curr + 1), yPos, 1, rectLength);
+        rctx.fillRect(spacing * (curr), yPos, spacing, rectLength);
     }
 }
 
@@ -275,7 +286,7 @@ function main() {
     walls.forEach((wall) => wall.draw());
     player.draw();
     player.movement();
-    let rays = new Rays(player, fov=90, num=1000, sight=1000);
+    let rays = new Rays(player, fov=90, num=100, sight=1000);
     rays.draw(bounds=walls);
 
 }
